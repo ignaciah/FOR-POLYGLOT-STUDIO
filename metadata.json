@@ -1,0 +1,8 @@
+{
+  "name": "PolyGlot Studio",
+  "description": "AI-powered multimodal content localization platform that adapts text, images, and audio simultaneously using Gemini 3.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
