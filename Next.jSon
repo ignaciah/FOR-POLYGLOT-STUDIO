@@ -1,0 +1,67 @@
+Update next.config.js
+
+```javascript
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  // Enable if you use App Router
+  reactStrictMode: true,
+  
+  // Important for Vercel deployment
+  output: 'standalone',  // For better performance
+  
+  // Environment variables that should be available at build time
+  env: {
+    NEXT_PUBLIC_VERCEL_URL: process.env.VERCEL_URL,
+  },
+  
+  // Enable if using external APIs
+  async headers() {
+    return [
+      {
+        source: '/api/:path*',
+        headers: [
+          { key: 'Access-Control-Allow-Credentials', value: 'true' },
+          { key: 'Access-Control-Allow-Origin', value: '*' },
+          { key: 'Access-Control-Allow-Methods', value: 'GET,DELETE,PATCH,POST,PUT' },
+        ],
+      },
+    ]
+  },
+}
+
+module.exports = nextConfig
+```
+
+3. Update package.json
+
+```json
+{
+  "name": "polyglot-studio",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.21.0",
+    "@types/node": "20.x",
+    "@types/react": "18.x",
+    "@types/react-dom": "18.x",
+    "autoprefixer": "10.x",
+    "lucide-react": "^0.344.0",
+    "next": "14.x",
+    "postcss": "8.x",
+    "react": "18.x",
+    "react-dom": "18.x",
+    "sonner": "^1.4.0",
+    "tailwindcss": "3.x",
+    "typescript": "5.x"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
+```
