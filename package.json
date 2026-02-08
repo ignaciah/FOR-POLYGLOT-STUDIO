@@ -1,34 +1,24 @@
-
 {
   "name": "polyglot-studio",
-  "version": "0.1.0",
   "private": true,
+  "version": "0.0.0",
+  "type": "module",
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "next lint"
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
   },
   "dependencies": {
-    "@google/generative-ai": "^0.21.0",
-    "lucide-react": "^0.474.0",
-    "next": "14.2.0",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "sonner": "^1.7.0"
+    "react": "19.0.0",
+    "react-dom": "19.0.0",
+    "lucide-react": "0.469.0",
+    "sonner": "1.7.1",
+    "@google/genai": "1.39.0"
   },
   "devDependencies": {
-    "@types/node": "^20.11.0",
-    "@types/react": "^18.2.0",
-    "@types/react-dom": "^18.2.0",
-    "autoprefixer": "^10.4.17",
-    "eslint": "^8.56.0",
-    "eslint-config-next": "14.2.0",
-    "postcss": "^8.4.35",
-    "tailwindcss": "^3.4.1",
-    "typescript": "^5.3.3"
-  },
-  "engines": {
-    "node": ">=18.17.0"
+    "@types/node": "^22.14.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "typescript": "~5.8.2",
+    "vite": "^6.2.0"
   }
 }

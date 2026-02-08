@@ -1,8 +1,13 @@
 
 import React, { useState, useRef } from 'react';
-import { Layout } from './components/Layout';
+import { Toaster, toast } from 'sonner';
+import { Sparkles } from 'lucide-react';
+import Header from './components/Layout/Header';
+import Sidebar from './components/Layout/Sidebar';
 import { MediaPreview } from './components/MediaPreview';
 import { AssistantSidebar } from './components/AssistantSidebar';
+import TextEditor from './components/Editor/TextEditor';
+import ImageProcessor from './components/Editor/ImageProcessor';
 import { TargetLanguage, ProjectMedia, LocalizationResult } from './types';
 import { GeminiService } from './services/geminiService';
 
@@ -15,6 +20,7 @@ const App: React.FC = () => {
   const [result, setResult] = useState<LocalizationResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -24,7 +30,7 @@ const App: React.FC = () => {
       const isAudio = file.type.startsWith('audio/');
       
       if (!isImage && !isAudio) {
-        setError("Only image and audio files are supported for multimodal localization.");
+        toast.error("Unsupported file format. Please upload an image or audio file.");
         return;
       }
 
@@ -38,65 +44,65 @@ const App: React.FC = () => {
           mimeType: file.type,
           fileName: file.name
         });
-        setError(null);
+        toast.success(`${isImage ? 'Visual' : 'Audio'} context added!`);
       };
       reader.readAsDataURL(file);
     }
   };
 
   const runLocalization = async () => {
-    if (!text && !media) {
-      setError("Please provide some text or media to localize.");
+    if (!text) {
+      toast.error("Please enter some campaign text to localize.");
       return;
     }
 
     setLoading(true);
     setResult(null);
     setError(null);
-    setLoadingMessage('Gemini 3: Analyzing multimodal context...');
+    setLoadingMessage('Gemini 3 Pro: Analyzing Context...');
 
     try {
       const service = new GeminiService();
-      
       const localization = await service.localizeContent(text, language, media);
       
-      setLoadingMessage('Gemini 3: Adapting visual identity...');
+      setLoadingMessage('Gemini 2.5: Adapting Visuals...');
       let localizedImage = '';
       try {
         localizedImage = await service.generateLocalizedImage(
-          localization.suggestedVisualChanges, 
+          localization.suggestedVisualChanges || "Adapted version of current visual", 
           media?.type === 'image' ? media.content : undefined
         );
-      } catch (e) { console.error("Image gen failed", e); }
+      } catch (e) { console.error("Visual adaptation failed:", e); }
 
-      setLoadingMessage('Gemini 3: Synthesizing natural voiceover...');
-      
+      setLoadingMessage('Gemini 2.5 TTS: Synthesizing Audio...');
       try {
-        // We ensure context is created if it doesn't exist for subsequent calls
-        if (!audioContextRef.current) {
-          audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+        if (localization.translatedText) {
+          if (!audioContextRef.current) {
+            audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+          }
+          await service.generateAndPlayTTS(localization.translatedText, language, audioContextRef.current);
         }
-        await service.generateAndPlayTTS(localization.translatedText, language, audioContextRef.current);
-      } catch (e) { 
-        console.error("TTS generation or playback failed", e); 
-      }
+      } catch (e) { console.error("Audio synthesis failed:", e); }
 
       setResult({
         ...localization,
         localizedImageUrl: localizedImage || undefined,
         localizedAudioUrl: 'READY'
       });
+      
+      toast.success("Localization completed successfully!");
 
     } catch (err: any) {
-      setError(err.message || "Something went wrong during localization.");
+      setError(err.message || "Failed to process localization.");
+      toast.error("Localization failed. Check cultural safety flags.");
     } finally {
       setLoading(false);
       setLoadingMessage('');
     }
   };
 
-  const playAudioManual = async () => {
-    if (result && result.translatedText) {
+  const playLocalizedAudio = async () => {
+    if (result?.translatedText) {
       const service = new GeminiService();
       if (!audioContextRef.current) {
         audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
@@ -105,187 +111,190 @@ const App: React.FC = () => {
     }
   };
 
+  const triggerFileUpload = () => {
+    fileInputRef.current?.click();
+  };
+
   return (
-    <Layout>
-      <div className="flex flex-col lg:flex-row gap-8 h-[calc(100vh-160px)]">
-        
-        {/* Main Workspace */}
-        <div className="flex-1 overflow-y-auto pr-2 space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 flex flex-col">
+      <Header />
+      <div className="flex flex-1 overflow-hidden">
+        <Sidebar />
+        <main className="flex-1 p-6 lg:p-10 overflow-y-auto scrollbar-hide">
+          <Toaster position="top-right" richColors />
+          
+          {/* Main Content Area */}
+          <div className="max-w-6xl mx-auto">
+            <div className="mb-10">
+              <h1 className="text-4xl font-bold text-gray-900 mb-2 tracking-tight">
+                PolyGlot Studio
+              </h1>
+              <p className="text-gray-600 font-medium">
+                Transform your content across languages and cultures with AI-powered multimodal precision.
+              </p>
+            </div>
+
+            <input 
+              type="file" 
+              ref={fileInputRef} 
+              onChange={handleFileChange} 
+              className="hidden" 
+              accept="image/*,audio/*" 
+            />
             
-            {/* Input Side */}
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 h-fit">
-              <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
-                <svg className="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                Project Assets
-              </h2>
-              <div className="space-y-4">
-                <textarea 
-                  value={text}
-                  onChange={(e) => setText(e.target.value)}
-                  placeholder="Paste your original ad copy or campaign text here..."
-                  className="w-full h-24 p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none text-sm transition"
+            <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 pb-20">
+              {/* Multimodal Editor Stage */}
+              <div className="xl:col-span-8 space-y-8">
+                <TextEditor 
+                  text={text}
+                  setText={setText}
+                  targetLang={language}
+                  setTargetLang={setLanguage}
+                  isTranslating={loading}
+                  onTranslate={runLocalization}
+                  onAddMedia={triggerFileUpload}
+                  translationPreview={result?.translatedText}
+                  hasMedia={!!media}
                 />
                 
-                <div className="flex gap-4">
-                  <select 
-                    value={language}
-                    onChange={(e) => setLanguage(e.target.value as TargetLanguage)}
-                    className="flex-1 p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm"
-                  >
-                    {Object.entries(TargetLanguage).map(([key, val]) => (
-                      <option key={key} value={val}>{val}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="relative border-2 border-dashed border-gray-200 rounded-xl overflow-hidden min-h-[140px] flex items-center justify-center hover:bg-gray-50 transition cursor-pointer">
-                  {!media ? (
-                    <>
-                      <input type="file" accept="image/*,audio/*" onChange={handleFileChange} className="absolute inset-0 opacity-0 cursor-pointer" />
-                      <div className="text-center p-4">
-                        <svg className="w-8 h-8 mx-auto text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
-                        <p className="text-xs text-gray-500 font-medium">Upload Image or Audio Reference</p>
-                        <p className="text-[10px] text-gray-400 mt-1 uppercase tracking-tighter">Gemini 3 Multimodal Input</p>
-                      </div>
-                    </>
-                  ) : (
-                    <MediaPreview media={media} onRemove={() => setMedia(undefined)} />
-                  )}
-                </div>
-
-                <button 
-                  onClick={runLocalization}
-                  disabled={loading}
-                  className={`w-full py-3.5 rounded-xl font-bold text-white transition-all transform active:scale-95 flex items-center justify-center gap-2 ${
-                    loading ? 'bg-indigo-400' : 'bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-100'
-                  }`}
-                >
-                  {loading ? 'Processing Multimodal Pipeline...' : 'Transform Campaign'}
-                </button>
-              </div>
-            </div>
-
-            {/* Results Header/Summary */}
-            <div className="space-y-6">
-              {result ? (
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-indigo-100 animate-in fade-in duration-500">
-                  <div className="flex justify-between items-center mb-4">
-                    <h3 className="font-bold text-gray-900">Localization Strategy</h3>
-                    <div className="px-3 py-1 bg-green-50 text-green-700 text-xs font-bold rounded-full border border-green-100">
-                      Score: {Math.round(result.qualityScore * 100)}%
+                {/* Visual Analysis Engine */}
+                <ImageProcessor />
+                
+                {/* Active Media Context Preview */}
+                {media && (
+                  <div className="animate-in slide-in-from-top-4 duration-500">
+                    <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3 ml-2">Active Context</h3>
+                    <div className="max-w-md">
+                      <MediaPreview media={media} onRemove={() => setMedia(undefined)} />
                     </div>
                   </div>
-                  <div className="space-y-3">
-                    <div className="text-sm p-3 bg-gray-50 rounded-lg italic text-gray-600 border-l-4 border-indigo-400">
-                      {result.brandVoiceCheck}
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {result.culturalNotes.slice(0, 3).map((n, i) => (
-                        <span key={i} className="text-[10px] bg-indigo-50 text-indigo-600 px-2 py-1 rounded-md font-medium">{n}</span>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="bg-gray-100/50 border-2 border-dashed border-gray-200 rounded-2xl h-48 flex items-center justify-center text-gray-400 text-sm italic">
-                  Results will appear after processing...
-                </div>
-              )}
+                )}
 
-              {/* Cultural Scanner Flags */}
-              {result && result.culturalFlags.length > 0 && (
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-red-50">
-                  <h3 className="text-sm font-bold text-red-600 mb-3 flex items-center gap-2 uppercase tracking-wider">
-                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" /></svg>
-                    Cultural Appropriateness Flags
-                  </h3>
-                  <div className="space-y-3">
-                    {result.culturalFlags.map((flag, i) => (
-                      <div key={i} className="p-3 bg-red-50 rounded-xl border border-red-100">
-                        <div className="flex justify-between items-center mb-1">
-                          <span className="text-xs font-bold text-red-700">{flag.issue}</span>
-                          <span className={`text-[10px] uppercase font-bold px-1.5 rounded ${
-                            flag.severity === 'high' ? 'bg-red-200 text-red-800' : 'bg-orange-200 text-orange-800'
-                          }`}>{flag.severity}</span>
+                {/* Localized Output Stage */}
+                {result && (
+                  <div className="bg-white rounded-[2rem] shadow-2xl overflow-hidden border border-gray-100 animate-in slide-in-from-bottom-12 duration-1000 mt-8">
+                    <div className="grid grid-cols-1 md:grid-cols-2 min-h-[450px]">
+                      {/* Visual Section */}
+                      <div className="p-10 bg-slate-900 text-white flex flex-col">
+                        <div className="flex justify-between items-center mb-8">
+                          <h3 className="text-[10px] font-black text-indigo-400 uppercase tracking-[0.4em]">Visual Synthesis</h3>
                         </div>
-                        <p className="text-[11px] text-red-600 italic">" {flag.suggestion} "</p>
+                        <div className="flex-1 rounded-[2rem] overflow-hidden relative group bg-slate-800 shadow-2xl">
+                          {result.localizedImageUrl ? (
+                            <img src={result.localizedImageUrl} className="w-full h-full object-cover transition duration-[2.5s] group-hover:scale-105" alt="Localized" />
+                          ) : (
+                            <div className="flex flex-col items-center justify-center h-full gap-4 text-slate-600">
+                              <div className="w-10 h-10 border-4 border-slate-700 border-t-indigo-500 rounded-full animate-spin"></div>
+                              <p className="text-[9px] font-black uppercase tracking-widest italic">Mutation in Progress...</p>
+                            </div>
+                          )}
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent opacity-0 group-hover:opacity-100 transition-all duration-700 flex flex-col justify-end p-10">
+                            <h4 className="text-[10px] text-indigo-400 font-black uppercase mb-3 tracking-widest">Visual Rationale</h4>
+                            <p className="text-xs text-white/90 font-medium leading-relaxed">{result.suggestedVisualChanges}</p>
+                          </div>
+                        </div>
                       </div>
-                    ))}
+                      
+                      {/* Sonic Branding Section */}
+                      <div className="p-10 space-y-12 bg-white flex flex-col justify-center border-l border-gray-100">
+                        <div>
+                          <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.4em] mb-8">Sonic Brand Bridge</h3>
+                          <div 
+                            onClick={playLocalizedAudio}
+                            className="p-8 bg-slate-50 hover:bg-slate-100 rounded-[2.5rem] border border-slate-200 flex items-center gap-8 cursor-pointer transition-all active:scale-95 group shadow-sm"
+                          >
+                            <div className="w-16 h-16 bg-indigo-600 rounded-full flex items-center justify-center text-white shadow-xl shadow-indigo-100 group-hover:scale-105 transition-transform">
+                              <svg className="w-8 h-8 ml-1" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" /></svg>
+                            </div>
+                            <div className="flex-1">
+                              <div className="flex justify-between items-center mb-3">
+                                <span className="text-[11px] font-black text-slate-900 uppercase tracking-widest">Native Synthesis</span>
+                                <span className="text-[9px] bg-white px-2 py-0.5 rounded-full text-indigo-600 font-bold border border-indigo-100 shadow-sm uppercase tracking-tighter">Gemini 2.5</span>
+                              </div>
+                              <div className="h-2 w-full bg-slate-200 rounded-full overflow-hidden">
+                                <div className="h-full w-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full animate-pulse origin-left transition-all"></div>
+                              </div>
+                              <p className="text-[9px] text-slate-400 mt-2 font-bold uppercase tracking-tighter">Click for Playback</p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
+              </div>
+
+              {/* Cultural Intelligence Sidebar */}
+              <div className="xl:col-span-4 space-y-8">
+                {result ? (
+                  <>
+                    <div className="bg-white p-6 rounded-2xl shadow-sm border border-indigo-100 animate-in fade-in slide-in-from-right-4 duration-500">
+                      <div className="flex justify-between items-center mb-6">
+                        <h3 className="font-black text-[11px] text-slate-800 flex items-center gap-2 uppercase tracking-widest">
+                          <svg className="w-4 h-4 text-indigo-600" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" /></svg>
+                          Cultural Intelligence
+                        </h3>
+                        <div className="text-[9px] font-black bg-indigo-600 text-white px-2 py-1 rounded shadow-md">ADAPTATION: {Math.round(result.qualityScore * 100)}%</div>
+                      </div>
+                      <div className="space-y-4">
+                        {result.brandVoiceCheck && (
+                          <div className="p-4 bg-indigo-50/30 rounded-2xl border-l-4 border-indigo-600 text-xs italic text-slate-700 leading-relaxed">
+                            <span className="font-black text-indigo-700 block mb-1 uppercase text-[9px] tracking-widest">Brand Voice Verdict</span>
+                            "{result.brandVoiceCheck}"
+                          </div>
+                        )}
+                        <div className="space-y-3">
+                          {result.culturalNotes?.map((note, i) => (
+                            <div key={i} className="flex gap-3 text-[11px] text-slate-600 leading-normal font-medium">
+                              <div className="w-1.5 h-1.5 bg-indigo-400 rounded-full mt-1 shrink-0"></div>
+                              {note}
+                            </div>
+                          )) || <p className="text-xs text-slate-400 italic">No cultural notes available.</p>}
+                        </div>
+                      </div>
+                    </div>
+
+                    {(result.culturalFlags?.length ?? 0) > 0 && (
+                      <div className="bg-white p-6 rounded-2xl shadow-sm border border-red-50">
+                        <h3 className="text-[10px] font-black text-red-600 mb-5 uppercase tracking-[0.3em] flex items-center gap-2">
+                          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" /></svg>
+                          Safety Warnings
+                        </h3>
+                        <div className="space-y-4">
+                          {result.culturalFlags?.map((flag, i) => (
+                            <div key={i} className={`p-4 rounded-2xl border-l-4 transition-all hover:translate-x-1 ${flag.severity === 'high' ? 'bg-red-50 border-red-500' : 'bg-orange-50 border-orange-400'}`}>
+                              <div className="flex justify-between items-center mb-1">
+                                <span className="text-[10px] font-black text-slate-800 uppercase tracking-tighter">{flag.issue}</span>
+                                <span className={`text-[7px] font-black px-1.5 py-0.5 rounded shadow-sm ${flag.severity === 'high' ? 'bg-red-200 text-red-800' : 'bg-orange-200 text-orange-800'}`}>
+                                  {flag.severity.toUpperCase()}
+                                </span>
+                              </div>
+                              <p className="text-[10px] text-slate-600 font-semibold leading-relaxed">Fix: {flag.suggestion}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="bg-white/50 border-2 border-dashed border-gray-200 rounded-3xl h-64 flex flex-col items-center justify-center p-8 text-center">
+                     <div className="w-16 h-16 bg-white rounded-full shadow-inner flex items-center justify-center mb-4 text-slate-300">
+                       <Sparkles size={24} />
+                     </div>
+                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Ready for Analysis</p>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-
-          {/* Multimodal Output Grid */}
-          {result && (
-            <div className="bg-white rounded-3xl shadow-xl overflow-hidden border border-gray-100 animate-in slide-in-from-bottom-8 duration-700">
-              <div className="grid grid-cols-1 md:grid-cols-2">
-                {/* Visual Output */}
-                <div className="p-8 bg-slate-900 text-white flex flex-col">
-                  <h3 className="text-xs font-bold text-indigo-400 uppercase tracking-widest mb-4">Adapted Visual Asset</h3>
-                  <div className="flex-1 aspect-video bg-slate-800 rounded-2xl overflow-hidden relative group">
-                    {result.localizedImageUrl ? (
-                      <img src={result.localizedImageUrl} className="w-full h-full object-cover transition duration-500 group-hover:scale-105" alt="Localized" />
-                    ) : (
-                      <div className="flex items-center justify-center h-full text-slate-500 animate-pulse italic">Rendering...</div>
-                    )}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition flex items-end p-4">
-                      <p className="text-xs text-indigo-200">AI-suggested: {result.suggestedVisualChanges}</p>
-                    </div>
-                  </div>
-                </div>
-                
-                {/* Text/Audio Output */}
-                <div className="p-8 space-y-8">
-                  <div>
-                    <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">Localized Slogan & Copy</h3>
-                    <div className="p-6 bg-indigo-50/50 rounded-3xl border border-indigo-100 relative">
-                      <p className="text-3xl font-black text-indigo-900 leading-tight">
-                        {result.translatedText}
-                      </p>
-                      <div className="absolute -top-3 -left-3 w-8 h-8 bg-indigo-600 rounded-full flex items-center justify-center text-white text-xs font-bold shadow-lg shadow-indigo-200">
-                        {language[0]}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div>
-                    <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">Multimodal Audio Bridge</h3>
-                    <div className="p-5 bg-gray-50 rounded-2xl border border-gray-100 flex items-center gap-4">
-                      <div 
-                        onClick={playAudioManual}
-                        className="w-12 h-12 bg-indigo-600 rounded-full flex items-center justify-center text-white shadow-lg cursor-pointer hover:bg-indigo-700 transition active:scale-90"
-                      >
-                        <svg className="w-6 h-6 ml-1" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" /></svg>
-                      </div>
-                      <div className="flex-1">
-                        <div className="flex justify-between items-center mb-1.5">
-                          <span className="text-xs font-bold text-gray-700 uppercase">Localized Voiceover</span>
-                          <span className="text-[10px] text-indigo-500 font-bold">24kHz PCM</span>
-                        </div>
-                        <div className="h-1.5 w-full bg-indigo-100 rounded-full overflow-hidden">
-                          <div className="h-full w-2/3 bg-indigo-500 rounded-full animate-pulse"></div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Gemini Assistant Sidebar */}
-        <div className="w-full lg:w-80 h-full">
+        </main>
+        
+        {/* Assistant / Chat Sidebar */}
+        <div className="w-[350px] shrink-0 hidden xl:block">
            <AssistantSidebar context={result} />
         </div>
-
       </div>
-    </Layout>
+    </div>
   );
 };
 

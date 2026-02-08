@@ -2,55 +2,151 @@
 import { GoogleGenAI, Type, Modality } from "@google/genai";
 import { ProjectMedia, TargetLanguage, LocalizationResult, ChatMessage } from "../types";
 
-const API_KEY = process.env.API_KEY;
-
 export class GeminiService {
   private ai: GoogleGenAI;
   private audioContext: AudioContext | null = null;
 
   constructor() {
-    if (!API_KEY) {
-      throw new Error("API_KEY is not defined in the environment");
-    }
-    this.ai = new GoogleGenAI({ apiKey: API_KEY });
+    // Correctly obtain and use the API key exclusively from process.env.API_KEY
+    this.ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   }
+
+  // --- Core Granular Methods ---
+
+  async translateText(text: string, targetLang: string, context?: string): Promise<string> {
+    const response = await this.ai.models.generateContent({
+      model: 'gemini-3-pro-preview',
+      contents: `Translate the following text to ${targetLang}. 
+      Maintain the original tone and intent.
+      ${context ? `Context: ${context}` : ''}
+      
+      Text: ${text}
+      
+      Provide only the translation.`,
+    });
+    return response.text || "";
+  }
+
+  async analyzeMultimodal(inputs: Array<{type: 'text' | 'image', content: string}>): Promise<any> {
+    const parts = inputs.map(input => {
+      if (input.type === 'text') {
+        return { text: input.content };
+      } else {
+        const base64Data = input.content.includes(',') ? input.content.split(',')[1] : input.content;
+        return { 
+          inlineData: {
+            data: base64Data,
+            mimeType: 'image/jpeg'
+          }
+        };
+      }
+    });
+
+    const prompt = `Analyze these multimodal inputs and provide a JSON response with:
+    1. mainThemes: Array of strings
+    2. culturalReferences: Array of objects { reference: string, detectionReason: string }
+    3. toneAnalysis: String describing tone and style
+    4. suggestedAdaptations: Array of objects { culture: string, advice: string }`;
+
+    const response = await this.ai.models.generateContent({
+      model: 'gemini-3-pro-preview',
+      contents: { parts: [...parts, { text: prompt }] },
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            mainThemes: { type: Type.ARRAY, items: { type: Type.STRING } },
+            culturalReferences: { 
+              type: Type.ARRAY, 
+              items: { 
+                type: Type.OBJECT,
+                properties: {
+                  reference: { type: Type.STRING },
+                  detectionReason: { type: Type.STRING }
+                }
+              } 
+            },
+            toneAnalysis: { type: Type.STRING },
+            suggestedAdaptations: { 
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  culture: { type: Type.STRING },
+                  advice: { type: Type.STRING }
+                }
+              }
+            }
+          }
+        }
+      }
+    });
+
+    try {
+      return JSON.parse(response.text || "{}");
+    } catch (e) {
+      return { error: "Failed to parse analysis" };
+    }
+  }
+
+  async adaptContent(content: string, sourceCulture: string, targetCulture: string): Promise<string> {
+    const response = await this.ai.models.generateContent({
+      model: 'gemini-3-pro-preview',
+      contents: `Adapt this content from ${sourceCulture} culture to ${targetCulture} culture.
+      Consider:
+      - Cultural references and idioms
+      - Humor and tone appropriateness
+      - Local examples and metaphors
+      - Social norms and sensitivities
+      
+      Content: ${content}
+      
+      Provide the adapted version.`,
+    });
+    return response.text || "";
+  }
+
+  // --- High Level Orchestration ---
 
   async localizeContent(
     text: string,
     targetLanguage: TargetLanguage,
     media?: ProjectMedia
   ): Promise<LocalizationResult> {
-    const model = 'gemini-3-flash-preview';
+    const model = 'gemini-3-pro-preview';
     
     const parts: any[] = [
       {
-        text: `You are a world-class localization and marketing expert. 
-        Localize the following campaign text into ${targetLanguage}. 
-        Ensure you maintain the brand's voice and creative intent.
+        text: `You are a world-class localization strategist. 
+        Adapt the campaign for ${targetLanguage}.
         
-        Analyze the cultural sensitivity of the provided assets.
+        PROTOCOL:
+        1. MULTIMODAL CONTEXT: Ensure text and visual sync.
+        2. IDIOMATIC EQUIVALENCE: Use natural phrases.
+        3. CULTURAL SAFETY: Flag issues (e.g. Test Suite rules).
+        4. TONE: Preserve brand status.
+
+        Text: "${text}"
         
-        Original Text: "${text}"
-        
-        Return your analysis in the following JSON format:
+        RETURN JSON:
         {
-          "translatedText": "the localized text",
-          "culturalNotes": ["note 1", "note 2"],
-          "suggestedVisualChanges": "Description of how the visual elements should be changed for this target market",
-          "culturalFlags": [
-            { "severity": "high" | "medium" | "low", "issue": "desc", "suggestion": "fix" }
-          ],
-          "brandVoiceCheck": "Analysis of how well the tone was preserved",
-          "qualityScore": 0.95
+          "translatedText": "translation",
+          "culturalNotes": ["note1", "note2"],
+          "suggestedVisualChanges": "desc",
+          "culturalFlags": [{ "severity": "high"|"medium"|"low", "issue": "desc", "suggestion": "fix" }],
+          "brandVoiceCheck": "summary",
+          "qualityScore": 0.9
         }`
       }
     ];
 
     if (media && media.type === 'image') {
+      const base64Data = media.content.includes(',') ? media.content.split(',')[1] : media.content;
       parts.push({
         inlineData: {
           mimeType: media.mimeType || 'image/png',
-          data: media.content.split(',')[1] || media.content
+          data: base64Data
         }
       });
     }
@@ -79,69 +175,51 @@ export class GeminiService {
             },
             brandVoiceCheck: { type: Type.STRING },
             qualityScore: { type: Type.NUMBER }
-          },
-          required: ["translatedText", "culturalNotes", "suggestedVisualChanges", "culturalFlags", "brandVoiceCheck", "qualityScore"]
+          }
         }
       }
     });
 
-    try {
-      return JSON.parse(response.text);
-    } catch (e) {
-      console.error("Failed to parse Gemini response", e);
-      throw new Error("Invalid response from AI engine");
-    }
+    return JSON.parse(response.text || "{}");
   }
 
   async assistantChat(history: ChatMessage[], currentMessage: string, context: LocalizationResult | null): Promise<string> {
-    const model = 'gemini-3-flash-preview';
-    const systemInstruction = `You are the PolyGlot Studio Assistant. You help creative teams adapt marketing campaigns. 
-    You have access to the current localization results: ${JSON.stringify(context)}. 
-    Be helpful, expert, and creative. Suggest alternatives and explain cultural nuances.`;
-
     const response = await this.ai.models.generateContent({
-      model,
+      model: 'gemini-3-flash-preview',
       contents: [
         ...history.map(m => ({ role: m.role, parts: [{ text: m.text }] })),
         { role: 'user', parts: [{ text: currentMessage }] }
       ],
-      config: { systemInstruction }
+      config: { 
+        systemInstruction: `PolyGlot Assistant. Context: ${JSON.stringify(context)}. Task: Mediate feedback and provide cultural advice.` 
+      }
     });
-
-    return response.text || "I'm sorry, I couldn't process that request.";
+    return response.text || "";
   }
 
   async generateLocalizedImage(prompt: string, originalImageBase64?: string): Promise<string> {
-    const model = 'gemini-2.5-flash-image';
-    
-    const parts: any[] = [
-      { text: `Create a localized marketing image for the target market: ${prompt}. Keep it professional and visually stunning.` }
-    ];
-
+    const parts: any[] = [{ text: `Localized image: ${prompt}` }];
     if (originalImageBase64) {
+      const base64Data = originalImageBase64.includes(',') ? originalImageBase64.split(',')[1] : originalImageBase64;
       parts.unshift({
         inlineData: {
           mimeType: 'image/png',
-          data: originalImageBase64.split(',')[1] || originalImageBase64
+          data: base64Data
         }
       });
-      parts[1].text = `Edit this image to fit these cultural needs: ${prompt}. Keep the core product but adjust the setting, background, and color palette.`;
     }
-
     const response = await this.ai.models.generateContent({
-      model,
+      model: 'gemini-2.5-flash-image',
       contents: { parts },
       config: { imageConfig: { aspectRatio: "16:9" } }
     });
-
-    for (const part of response.candidates[0].content.parts) {
-      if (part.inlineData) return `data:image/png;base64,${part.inlineData.data}`;
-    }
+    const part = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
+    if (part?.inlineData) return `data:image/png;base64,${part.inlineData.data}`;
     throw new Error("No image generated");
   }
 
   async generateTTS(text: string, language: TargetLanguage): Promise<Uint8Array> {
-    const voiceMap: Record<TargetLanguage, string> = {
+    const voiceMap: Record<string, string> = {
       [TargetLanguage.JAPANESE]: 'Kore',
       [TargetLanguage.SPANISH]: 'Puck',
       [TargetLanguage.FRENCH]: 'Charon',
@@ -149,49 +227,68 @@ export class GeminiService {
       [TargetLanguage.CHINESE]: 'Kore',
       [TargetLanguage.ARABIC]: 'Zephyr'
     };
-    
-    const response = await this.ai.models.generateContent({
-      model: "gemini-2.5-flash-preview-tts",
-      contents: [{ parts: [{ text: `Professional marketing voice: ${text}` }] }],
-      config: {
-        responseModalities: [Modality.AUDIO],
-        speechConfig: {
-          voiceConfig: { prebuiltVoiceConfig: { voiceName: voiceMap[language] || 'Puck' } }
-        }
-      }
-    });
 
-    const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-    if (!base64Audio) throw new Error("TTS Generation Failed");
-    return this.decodeBase64(base64Audio);
+    // TRUNCATION FIX: The gemini-2.5-flash-preview-tts model has an input limit.
+    // Marketing copy should be snappy anyway. 2500 characters is roughly 5-10 minutes of speech.
+    const MAX_TTS_CHARS = 2500;
+    const safeText = text.length > MAX_TTS_CHARS ? text.substring(0, MAX_TTS_CHARS) + "..." : text;
+
+    try {
+      const response = await this.ai.models.generateContent({
+        model: "gemini-2.5-flash-preview-tts",
+        contents: [{ parts: [{ text: safeText }] }],
+        config: {
+          responseModalities: [Modality.AUDIO],
+          speechConfig: { 
+            voiceConfig: { 
+              prebuiltVoiceConfig: { 
+                voiceName: voiceMap[language] || 'Puck' 
+              } 
+            } 
+          }
+        }
+      });
+      const data = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+      if (!data) throw new Error("TTS response contained no audio data.");
+      return this.decodeBase64(data);
+    } catch (err: any) {
+      if (err.message?.includes('token count')) {
+        throw new Error("The translated content is too long for the current voice synthesizer. Try shorter segments.");
+      }
+      throw err;
+    }
   }
 
-  /**
-   * Generates localized audio and plays it immediately.
-   */
   async generateAndPlayTTS(text: string, language: TargetLanguage, ctx?: AudioContext): Promise<void> {
-    const audioBytes = await this.generateTTS(text, language);
+    if (!text || text.trim().length === 0) return;
     
-    const context = ctx || this.audioContext || (this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 }));
-    if (context.state === 'suspended') {
-      await context.resume();
+    try {
+      const bytes = await this.generateTTS(text, language);
+      const context = ctx || this.audioContext || (this.audioContext = new AudioContext({ sampleRate: 24000 }));
+      if (context.state === 'suspended') await context.resume();
+      
+      const buffer = await decodeAudioData(bytes, context, 24000, 1);
+      const source = context.createBufferSource();
+      source.buffer = buffer;
+      source.connect(context.destination);
+      source.start();
+    } catch (err) {
+      console.error("Audio playback error:", err);
+      throw err;
     }
-
-    const buffer = await decodeAudioData(audioBytes, context, 24000, 1);
-    const source = context.createBufferSource();
-    source.buffer = buffer;
-    source.connect(context.destination);
-    source.start();
   }
 
   private decodeBase64(base64: string): Uint8Array {
-    const binaryString = atob(base64);
-    const bytes = new Uint8Array(binaryString.length);
-    for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
     return bytes;
   }
 }
 
+/**
+ * Decodes raw PCM audio data as required by Gemini 2.5 Flash TTS
+ */
 export async function decodeAudioData(data: Uint8Array, ctx: AudioContext, sampleRate: number, numChannels: number): Promise<AudioBuffer> {
   const dataInt16 = new Int16Array(data.buffer);
   const frameCount = dataInt16.length / numChannels;
