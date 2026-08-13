@@ -59,13 +59,13 @@ const App: React.FC = () => {
     setLoading(true);
     setResult(null);
     setError(null);
-    setLoadingMessage('Gemini 3 Pro: Analyzing Context...');
+    setLoadingMessage('Gemini 3.6 Flash: Analyzing Cultural Context...');
 
     try {
       const service = new GeminiService();
       const localization = await service.localizeContent(text, language, media);
       
-      setLoadingMessage('Gemini 2.5: Adapting Visuals...');
+      setLoadingMessage('Gemini 3.1 Image: Adapting Visual Context...');
       let localizedImage = '';
       try {
         localizedImage = await service.generateLocalizedImage(
@@ -74,7 +74,7 @@ const App: React.FC = () => {
         );
       } catch (e) { console.error("Visual adaptation failed:", e); }
 
-      setLoadingMessage('Gemini 2.5 TTS: Synthesizing Audio...');
+      setLoadingMessage('Gemini 3.1 TTS: Synthesizing Native Voice...');
       try {
         if (localization.translatedText) {
           if (!audioContextRef.current) {
@@ -209,7 +209,7 @@ const App: React.FC = () => {
                             <div className="flex-1">
                               <div className="flex justify-between items-center mb-3">
                                 <span className="text-[11px] font-black text-slate-900 uppercase tracking-widest">Native Synthesis</span>
-                                <span className="text-[9px] bg-white px-2 py-0.5 rounded-full text-indigo-600 font-bold border border-indigo-100 shadow-sm uppercase tracking-tighter">Gemini 2.5</span>
+                                <span className="text-[9px] bg-white px-2 py-0.5 rounded-full text-indigo-600 font-bold border border-indigo-100 shadow-sm uppercase tracking-tighter">Gemini 3.1 TTS</span>
                               </div>
                               <div className="h-2 w-full bg-slate-200 rounded-full overflow-hidden">
                                 <div className="h-full w-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full animate-pulse origin-left transition-all"></div>

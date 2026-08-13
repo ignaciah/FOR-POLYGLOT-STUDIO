@@ -32,7 +32,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       </main>
       <footer className="bg-white border-t border-gray-200 py-6">
         <div className="max-w-7xl mx-auto px-4 text-center text-gray-500 text-xs">
-          © 2024 PolyGlot Studio - Powered by Gemini 3. Multimodal Content Localization Platform.
+          © 2026 PolyGlot Studio - Powered by Gemini 3.6 & Gemini 3.1. Multimodal Content Localization Platform.
         </div>
       </footer>
     </div>

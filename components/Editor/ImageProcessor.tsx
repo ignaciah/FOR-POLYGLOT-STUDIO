@@ -71,7 +71,7 @@ export default function ImageProcessor() {
           </div>
           <div>
             <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">Visual Context Engine</h3>
-            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">Gemini 3 Multimodal Analysis</p>
+            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">Gemini 3.6 Multimodal Analysis</p>
           </div>
         </div>
         

@@ -93,7 +93,7 @@ export default function TextEditor({
                 </p>
                 <div className="mt-4 flex gap-2">
                   <span className="text-[9px] bg-indigo-100 text-indigo-600 px-2 py-0.5 rounded font-bold uppercase tracking-tighter">AI Optimized</span>
-                  <span className="text-[9px] bg-white text-slate-400 px-2 py-0.5 rounded border border-gray-100 font-bold uppercase tracking-tighter">Gemini 3 Pro</span>
+                  <span className="text-[9px] bg-white text-slate-400 px-2 py-0.5 rounded border border-gray-100 font-bold uppercase tracking-tighter">Gemini 3.6 Flash</span>
                 </div>
               </div>
             ) : (

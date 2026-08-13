@@ -7,15 +7,23 @@ export class GeminiService {
   private audioContext: AudioContext | null = null;
 
   constructor() {
-    // Correctly obtain and use the API key exclusively from process.env.API_KEY
-    this.ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    // Correctly obtain and use the API key exclusively from process.env.API_KEY or GEMINI_API_KEY
+    const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
+    this.ai = new GoogleGenAI({ 
+      apiKey,
+      httpOptions: {
+        headers: {
+          'User-Agent': 'aistudio-build'
+        }
+      }
+    });
   }
 
   // --- Core Granular Methods ---
 
   async translateText(text: string, targetLang: string, context?: string): Promise<string> {
     const response = await this.ai.models.generateContent({
-      model: 'gemini-3-pro-preview',
+      model: 'gemini-3.6-flash',
       contents: `Translate the following text to ${targetLang}. 
       Maintain the original tone and intent.
       ${context ? `Context: ${context}` : ''}
@@ -49,7 +57,7 @@ export class GeminiService {
     4. suggestedAdaptations: Array of objects { culture: string, advice: string }`;
 
     const response = await this.ai.models.generateContent({
-      model: 'gemini-3-pro-preview',
+      model: 'gemini-3.6-flash',
       contents: { parts: [...parts, { text: prompt }] },
       config: {
         responseMimeType: "application/json",
@@ -92,7 +100,7 @@ export class GeminiService {
 
   async adaptContent(content: string, sourceCulture: string, targetCulture: string): Promise<string> {
     const response = await this.ai.models.generateContent({
-      model: 'gemini-3-pro-preview',
+      model: 'gemini-3.6-flash',
       contents: `Adapt this content from ${sourceCulture} culture to ${targetCulture} culture.
       Consider:
       - Cultural references and idioms
@@ -114,7 +122,7 @@ export class GeminiService {
     targetLanguage: TargetLanguage,
     media?: ProjectMedia
   ): Promise<LocalizationResult> {
-    const model = 'gemini-3-pro-preview';
+    const model = 'gemini-3.6-flash';
     
     const parts: any[] = [
       {
@@ -185,7 +193,7 @@ export class GeminiService {
 
   async assistantChat(history: ChatMessage[], currentMessage: string, context: LocalizationResult | null): Promise<string> {
     const response = await this.ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
+      model: 'gemini-3.6-flash',
       contents: [
         ...history.map(m => ({ role: m.role, parts: [{ text: m.text }] })),
         { role: 'user', parts: [{ text: currentMessage }] }
@@ -209,7 +217,7 @@ export class GeminiService {
       });
     }
     const response = await this.ai.models.generateContent({
-      model: 'gemini-2.5-flash-image',
+      model: 'gemini-3.1-flash-lite-image',
       contents: { parts },
       config: { imageConfig: { aspectRatio: "16:9" } }
     });
@@ -228,14 +236,12 @@ export class GeminiService {
       [TargetLanguage.ARABIC]: 'Zephyr'
     };
 
-    // TRUNCATION FIX: The gemini-2.5-flash-preview-tts model has an input limit.
-    // Marketing copy should be snappy anyway. 2500 characters is roughly 5-10 minutes of speech.
     const MAX_TTS_CHARS = 2500;
     const safeText = text.length > MAX_TTS_CHARS ? text.substring(0, MAX_TTS_CHARS) + "..." : text;
 
     try {
       const response = await this.ai.models.generateContent({
-        model: "gemini-2.5-flash-preview-tts",
+        model: "gemini-3.1-flash-tts-preview",
         contents: [{ parts: [{ text: safeText }] }],
         config: {
           responseModalities: [Modality.AUDIO],
